@@ -1,5 +1,5 @@
 # Image Format Picker (ComfyUI) – liest image_formats.json aus demselben Ordner
-# Outputs: width (INT), height (INT)
+# Outputs: image (IMAGE), width (INT), height (INT)
 # Defaults: format="4:3", size="medium"
 # Reihenfolge von Formaten und Größen folgt der JSON-Definition (nicht alphabetisch)
 
@@ -67,17 +67,22 @@ class ImageFormatPicker:
             "required": {
                 "format": (_FORMATS or ["4:3"], {"default": _DEFAULT_FORMAT}),
                 "size": (_SIZES or ["medium"], {"default": _DEFAULT_SIZE}),
+            },
+            "optional": {
+                "image": ("IMAGE", {"default": None}),
             }
         }
 
-    RETURN_TYPES = ("INT", "INT")
-    RETURN_NAMES = ("width", "height")
+    RETURN_TYPES = ("IMAGE", "INT", "INT")
+    RETURN_NAMES = ("image", "width", "height")
     FUNCTION = "pick"
     CATEGORY = "Utils/Resolution"
 
-    def pick(self, format, size):
+    def pick(self, format, size, image=None):
         w, h = _resolve(format, size)
-        return (w, h)
+        if image is None:
+            image = {}  # leeres Objekt zur Sicherheit
+        return (image, w, h)
 
 NODE_CLASS_MAPPINGS = {
     "ImageFormatPicker": ImageFormatPicker,
