@@ -1,13 +1,12 @@
-# Image Format Picker (ComfyUI) – liest image_formats.json aus demselben Ordner
-# Outputs: image (IMAGE), width (INT), height (INT)
-# Defaults: format="4:3", size="medium"
-# Reihenfolge von Formaten und Größen folgt der JSON-Definition (nicht alphabetisch)
-
-import os, json
+import os
+import json
+import torch
 
 print("[ImageFormatPicker] loading:", __file__)
 _THIS_DIR = os.path.dirname(__file__)
 _JSON_PATH = os.path.join(_THIS_DIR, "image_formats.json")
+
+DEBUG = True
 
 def _load_config():
     cfg = {}
@@ -41,13 +40,13 @@ def _load_config():
 
 _CFG, _FORMAT_ORDER, _SIZE_ORDER = _load_config()
 
-# Formate & Größen in JSON-Reihenfolge
 _FORMATS = _FORMAT_ORDER if _FORMAT_ORDER else list(_CFG.keys())
-_SIZES = _SIZE_ORDER if _SIZE_ORDER else (sorted(next(iter(_CFG.values())).keys()) if _CFG else ["medium"])
+_SIZES = _SIZE_ORDER if _SIZE_ORDER else (
+    sorted(next(iter(_CFG.values())).keys()) if _CFG else ["medium"]
+)
 
-# Explizite Defaults: bevorzugt "4:3" und "medium" wenn vorhanden
-_DEFAULT_FORMAT = "4:3" if "4:3" in _FORMATS else (_FORMATS[0] if _FORMATS else "4:3")
-_DEFAULT_SIZE = "medium" if "medium" in _SIZES else (_SIZES[0] if _SIZES else "medium")
+_DEFAULT_FORMAT = "4:3" if "4:3" in _FORMAT_ORDER else (_FORMAT_ORDER[0] if _FORMAT_ORDER else "4:3")
+_DEFAULT_SIZE = "medium" if "medium" in _SIZE_ORDER else (_SIZE_ORDER[0] if _SIZE_ORDER else "medium")
 
 def _resolve(fmt, size):
     fmt = str(fmt)
@@ -65,24 +64,94 @@ class ImageFormatPicker:
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "format": (_FORMATS or ["4:3"], {"default": _DEFAULT_FORMAT}),
-                "size": (_SIZES or ["medium"], {"default": _DEFAULT_SIZE}),
-            },
-            "optional": {
-                "image": ("IMAGE", {"default": None}),
+                "format": (_FORMAT_ORDER or ["4:3"], {"default": _DEFAULT_FORMAT}),
+                "size": (_SIZE_ORDER or ["medium"], {"default": _DEFAULT_SIZE}),
+                "image": ("IMAGE",),
+                "use_pick": ("BOOLEAN", {"default": True}),
             }
         }
 
-    RETURN_TYPES = ("IMAGE", "INT", "INT")
-    RETURN_NAMES = ("image", "width", "height")
+    RETURN_TYPES = (
+        "INT",
+        "INT",
+    )
+    RETURN_NAMES = (
+        "width",
+        "height",
+    )
     FUNCTION = "pick"
     CATEGORY = "Utils/Resolution"
 
-    def pick(self, format, size, image=None):
-        w, h = _resolve(format, size)
-        if image is None:
-            image = {}  # leeres Objekt zur Sicherheit
-        return (image, w, h)
+    def pick(self, format, size, image, use_pick):
+        pick_width, pick_height = _resolve(format, size)
+        img_w = 0
+        img_h = 0
+
+        try:
+            if DEBUG:
+                print(f"\n[ImageFormatPicker] Received image type: {type(image)}")
+
+            if isinstance(image, dict):
+                if "samples" in image:
+                    samples = image["samples"]
+                    if isinstance(samples, list) and len(samples) > 0:
+                        t = samples[0]
+                        if isinstance(t, torch.Tensor):
+                            if t.dim() == 3:
+                                img_h = int(t.shape[1])
+                                img_w = int(t.shape[2])
+                                if DEBUG:
+                                    print(f"[ImageFormatPicker] Got from samples[0] (3D): {t.shape}")
+                            elif t.dim() == 4:
+                                if t.shape[1] in [1, 3]:
+                                    img_h = int(t.shape[2])
+                                    img_w = int(t.shape[3])
+                                    if DEBUG:
+                                        print(f"[ImageFormatPicker] Got from samples[0] (4D CHW): {t.shape}")
+                                elif t.shape[3] in [1, 3]:
+                                    img_h = int(t.shape[1])
+                                    img_w = int(t.shape[2])
+                                    if DEBUG:
+                                        print(f"[ImageFormatPicker] Got from samples[0] (4D HWC): {t.shape}")
+
+                elif "image" in image:
+                    pil = image["image"]
+                    if hasattr(pil, "size"):
+                        img_w, img_h = pil.size
+                        if DEBUG:
+                            print(f"[ImageFormatPicker] Got from PIL image.size: {pil.size}")
+
+            elif isinstance(image, torch.Tensor):
+                if image.dim() == 3:
+                    img_h = int(image.shape[1])
+                    img_w = int(image.shape[2])
+                    if DEBUG:
+                        print(f"[ImageFormatPicker] Got from direct tensor (3D): {image.shape}")
+                elif image.dim() == 4:
+                    if image.shape[1] in [1, 3]:
+                        img_h = int(image.shape[2])
+                        img_w = int(image.shape[3])
+                        if DEBUG:
+                            print(f"[ImageFormatPicker] Got from direct tensor (4D CHW): {image.shape}")
+                    elif image.shape[3] in [1, 3]:
+                        img_h = int(image.shape[1])
+                        img_w = int(image.shape[2])
+                        if DEBUG:
+                            print(f"[ImageFormatPicker] Got from direct tensor (4D HWC): {image.shape}")
+
+        except Exception as e:
+            print(f"[ImageFormatPicker] WARN: image size extraction failed: {e}")
+
+        final_w = pick_width if use_pick else img_w
+        final_h = pick_height if use_pick else img_h
+
+        if DEBUG:
+            print(f"[ImageFormatPicker] → Out: pick=({pick_width},{pick_height})  img=({img_w},{img_h})  → final=({final_w},{final_h})")
+
+        return (
+            final_w,
+            final_h,
+        )
 
 NODE_CLASS_MAPPINGS = {
     "ImageFormatPicker": ImageFormatPicker,
