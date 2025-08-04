@@ -1,0 +1,22 @@
+{
+  "name": "ComfyUI-custom-pickers",
+  "author": "millerlight",
+  "version": "1.0.0",
+  "description": "ComfyUI custom nodes that pull default values from JSON files, e.g. for image formats",
+  "link": "https://github.com/millerlight/ComfyUI-custom-pickers",
+  "repo_url": "https://github.com/millerlight/ComfyUI-custom-pickers",
+  "license": "MIT",
+  "tags": [
+    "utility",
+    "io",
+    "json",
+    "image",
+    "format",
+    "picker",
+    "dropdown",
+    "frontend"
+  ],
+  "pip": [],
+  "requires": [],
+  "extensions": []
+}
